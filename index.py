@@ -10,7 +10,7 @@ import io
 import os
 import requests
 import base64
-import json
+
 
 # Configure logging
 logging.basicConfig(
@@ -69,29 +69,45 @@ def upload_to_imgbb(image_file):
         logger.error(traceback.format_exc())
         return None
 
-# Google Sheets Authentication and Submission
+def fetch_credentials_from_pantry():
+    pantry_url = "https://getpantry.cloud/apiv1/pantry/2b37110f-cba8-408c-afe9-2e150aa440c1/basket/newBasket55"
+    
+    try:
+        # Fetch data from Pantry
+        response = requests.get(pantry_url)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
+        # Parse JSON content
+        credentials_data = response.json()  # This will be a Python dictionary
+        
+        return credentials_data
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error fetching data from Pantry: {e}")
+        logger.error(f"Error fetching data from Pantry: {e}")
+        return None
+
+# Authenticate with Google Sheets using credentials from Pantry
 def authenticate_google_sheets():
     try:
-        # Specify the path to your credentials file
-        credentials_path = json.loads(st.secrets["google"]["servicemail"])
+        # Fetch credentials from Pantry
+        credentials_data = fetch_credentials_from_pantry()
         
-        # Verify credentials file exists
-        if not os.path.exists(credentials_path):
-            st.error(f"Credentials file not found at {credentials_path}")
-            logger.error(f"Credentials file not found at {credentials_path}")
+        if not credentials_data:
+            st.error("Failed to fetch credentials from Pantry")
+            logger.error("Failed to fetch credentials from Pantry")
             return None
 
-        scope = [
-            'https://spreadsheets.google.com/feeds', 
-            'https://www.googleapis.com/auth/drive'
-        ]
-        
+        # Define the scope for Google Sheets and Drive
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+
         try:
-            # Authenticate
-            creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
+            # Authenticate using the credentials from Pantry (google.oauth2 service_account Credentials)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_data, scopes=scope)
+            
+            # Authorize with gspread
             client = gspread.authorize(creds)
             
-            # Log accessible spreadsheets
+            # Log accessible spreadsheets (just for debugging purposes)
             spreadsheets = client.openall()
             logger.info("Accessible Spreadsheets:")
             for sheet in spreadsheets:
