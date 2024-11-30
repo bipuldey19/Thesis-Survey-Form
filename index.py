@@ -443,8 +443,6 @@ def main():
             success = submit_to_google_sheets(client, data_to_submit)
             if success:
                 st.success("Data successfully submitted to Google Sheets!")
-                if uploaded_image_url:
-                    st.success("Image successfully uploaded and URL stored in Google Sheets")
             else:
                 st.error("Failed to submit data to Google Sheets")
 
