@@ -6,6 +6,3 @@ Pillow
 piexif
 requests
 python-dotenv
-logging
-traceback
-base64
