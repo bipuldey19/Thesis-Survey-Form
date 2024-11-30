@@ -71,23 +71,29 @@ def upload_to_imgbb(image_file):
 # Google Sheets Authentication and Submission
 def authenticate_google_sheets():
     try:
-        # Specify the path to your credentials file
-        credentials_path = 'servicemail.json'
+        # Define credentials directly as a dictionary
+        credentials_dict = {
+            "type": "service_account",
+            "project_id": "thesis-443315",
+            "private_key_id": "08521d2eaeb78ff6708ad1d2a4c76c33114907c9",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDDidXmRZaf9BtO\nxwogGEwDlNjWNSHLYATTa4vyV9XA8JJXRssf0aGXdTnikIr2I6cpXfPcmeaCuzgo\nBvIpOEqecE5gR3IMWUvhE8IAd1kmTNC9zGjnet84CLuh8rowKs2tEv/iZerDtgTp\n7ZGEmkzte3SN4rL5B4AGg39DIEoObfZTxGzo8Mbgn0PwklLA6FPdz/Nd+tYlR+gb\nLZBLx7e9LEFkwG6gqWgEKN8UQv2iYqTpDzTtTLzVKHRt6HCqOWYwp2PT2zZ4lqdD\n6uBbnpESZrHMvZPSsga5wd1A7VpISwkuoE9r35TQEhB6gkrMK1/3k3JKvE6rAbzK\ngErU0HXvAgMBAAECggEATDBHI0eHBoEHKN098T52U8jp6iDer48Uokobx8v4kgpK\ngu4nFBlKtKhs6v313y0KI4CjlZdzrQmEunfmYDA6RtysdTAxXGVovuTDaQoXtugk\nR2e/kj4afotMjK/2YvEynZazFEQwwpwH8xvpYLj8c2Xwhp5HrOeCt0cCTaXlpRP8\n5VRd7hFo9n4RdZL7liOb0gP8pMNYvUYdwbKrvl1T7E2gptpBRB8N6vfr84iyxEcI\neUDz4wJmHuGozSjg2BT0S0125AIJljt7/Q1A8Lws6WlkE296DTvt8vi2XRpD2iJz\naqCl2SFy2vOucIGHzP5vjomRKE3/IBQmpI9Ct5LJXQKBgQD7b0ttQR21Ln67+KbQ\nXt5HM+v0KhUTmajR0rMcBuNeVyaf61FE6nWZGUy3yJo88gsdmFqBweqWjG0t3j97\n4vxuAZk6e0TNXH+ikwT+3l4bJooJz9pnaIw2T/CNpmtsbUJXhRIzZFiDGFIDO7mE\ny5ZUEo4q7AkWRahcgmRw66IYAwKBgQDHFroFFwQoUZvMFCBpNpzmXaul+Gw5RLBs\n6IHbwSY7ehEmdakgtx3RRevHVtdDCZlKsIxOhCjCNtQhpRy7msh+A3AWF8KKc3bf\nZER5ZvHGokIqxitD6B7LarAt2vlCnsOauo/0UlK2Yjbd/9S5ueG4GUfzJ23ldhA/\n6HLgsdJUpQKBgFFwI+MYQzILBDuH9yfogmBXneYwtzDpBTgo4aCDTqOg4L7Nbj4/\nHqXe/u1MCUESOK12SmJa18u5YieII9HRnGdZFzNM9+T4P9L9gZG3no12tyEkdJ4n\ny7pPvB91Nrggz2sfi9yfdNfJSc8ISjeL5X4HoIqgdvUCzNxh03yLpa3XAoGAUqr4\nMRbejhNc+v+8eZPI0MtCdBdUcO85xu9AxMxOINJN/sdKpCAFTJmZDtvbZKW+tkna\n6NttxT9ZFGNoK+pYqCKrTzEsgarySE5tNG/vowhLK1HAM2FWMCcr4s6TQ/uCw2QG\nVHA+kib0G3iYj0pFFNnCi4/qzSYaFz9hPDX6XVUCgYBpEMBDBLyyv3n/eat5M2z4\nu76HFmxYqXSf1bGNzYJW4ptWsvDrYOBOuOb7saobKAoWpV1qtFNh4eP9cQcVQbOT\n6lkjLZhLp5kujHbHKD4Vm69QO3Xw9Avx1nZaLIEocksJA8EWSxoXZw5QRrQScEcB\n8MBSA4alvvn4569owJQSAg==\n-----END PRIVATE KEY-----\n",
+            "client_email": "surveyform@thesis-443315.iam.gserviceaccount.com",
+            "client_id": "106601699387396059129",
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+            "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/surveyform%40thesis-443315.iam.gserviceaccount.com",
+            "universe_domain": "googleapis.com"
+        }
         
-        # Verify credentials file exists
-        if not os.path.exists(credentials_path):
-            st.error(f"Credentials file not found at {credentials_path}")
-            logger.error(f"Credentials file not found at {credentials_path}")
-            return None
-
         scope = [
             'https://spreadsheets.google.com/feeds', 
             'https://www.googleapis.com/auth/drive'
         ]
         
         try:
-            # Authenticate
-            creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, scope)
+            # Authenticate using the credentials dictionary
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
             client = gspread.authorize(creds)
             
             # Log accessible spreadsheets
