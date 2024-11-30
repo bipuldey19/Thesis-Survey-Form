@@ -10,6 +10,7 @@ import io
 import os
 import requests
 import base64
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -72,7 +73,7 @@ def upload_to_imgbb(image_file):
 def authenticate_google_sheets():
     try:
         # Specify the path to your credentials file
-        credentials_path = 'service.json'
+        credentials_path = json.loads(st.secrets["google"]["servicemail"])
         
         # Verify credentials file exists
         if not os.path.exists(credentials_path):
