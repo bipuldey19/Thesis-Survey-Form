@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 8501
 
 # Specify the command to run the Streamlit application
-CMD ["streamlit", "run", "index.py", "--server.port=8501", "--server.address=0.0.0.0"]
+CMD ["streamlit", "run", "index.py"]
