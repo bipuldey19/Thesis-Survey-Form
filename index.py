@@ -283,49 +283,79 @@ def convert_gps_to_decimal(gps_coords):
         
         return None, None
 
-def get_browser_geolocation():
+def get_browser_location():
     """
-    JavaScript to capture browser geolocation
-    Returns a Streamlit component that runs in the background
+    JavaScript to retrieve browser location
     """
-    geolocation_script = """
+    location_script = """
     <script>
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                const latitude = position.coords.latitude;
-                const longitude = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                
-                // Send data to parent window
-                window.parent.postMessage({
-                    type: 'geolocation', 
-                    latitude: latitude, 
-                    longitude: longitude,
-                    accuracy: accuracy
-                }, '*');
-            },
-            (error) => {
-                window.parent.postMessage({
-                    type: 'geolocation_error', 
-                    message: error.message
-                }, '*');
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 5000,
-                maximumAge: 0
-            }
-        );
-    } else {
-        window.parent.postMessage({
-            type: 'geolocation_error', 
-            message: 'Geolocation not supported'
-        }, '*');
-    }
+    document.addEventListener('DOMContentLoaded', function() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    // Send coordinates back to Streamlit
+                    window.parent.postMessage({
+                        type: 'streamlit:location', 
+                        latitude: position.coords.latitude, 
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    }, '*');
+                },
+                function(error) {
+                    window.parent.postMessage({
+                        type: 'streamlit:location-error', 
+                        message: error.message
+                    }, '*');
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                }
+            );
+        } else {
+            window.parent.postMessage({
+                type: 'streamlit:location-error', 
+                message: 'Geolocation is not supported by this browser.'
+            }, '*');
+        }
+    });
     </script>
     """
-    components.html(geolocation_script, height=0)
+    components.html(location_script, height=0)
+
+def modify_main_function(main_func):
+    def wrapper():
+        # Original main function content
+        main_func()
+        
+        # Add location retrieval script
+        st.markdown("""
+        <script>
+        // Listen for location messages from the iframe
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'streamlit:location') {
+                Streamlit.setComponentValue({
+                    'latitude': event.data.latitude,
+                    'longitude': event.data.longitude,
+                    'accuracy': event.data.accuracy
+                });
+            } else if (event.data.type === 'streamlit:location-error') {
+                console.error('Location Error:', event.data.message);
+                Streamlit.setComponentValue(null);
+            }
+        }, false);
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # Trigger location retrieval when camera is active
+        location_placeholder = st.empty()
+        
+        if st.camera_input("Capture Location"):
+            get_browser_location()
+            location_placeholder.warning("Please allow location access when prompted")
+    
+    return wrapper
 
 # Main Streamlit Application
 def main():
@@ -421,71 +451,7 @@ def main():
                 # Log the full traceback
                 st.error(traceback.format_exc())
     
-    elif location_method == "Capture Image":
-        # Add a hidden geolocation component
-        get_browser_geolocation()
-        
-        # Existing camera input
-        captured_image = st.camera_input("Capture Image")
-        
-        if captured_image:
-            # Create a session state to store geolocation
-            if 'browser_latitude' not in st.session_state:
-                st.session_state.browser_latitude = None
-            if 'browser_longitude' not in st.session_state:
-                st.session_state.browser_longitude = None
-            
-            # Add JavaScript to capture geolocation
-            components.html("""
-            <script>
-            window.addEventListener('message', (event) => {
-                if (event.data.type === 'geolocation') {
-                    // Send geolocation data back to Streamlit
-                    window.location.href = 
-                        '?latitude=' + event.data.latitude + 
-                        '&longitude=' + event.data.longitude;
-                }
-            }, false);
-            </script>
-            """, height=0)
-            
-            # Check if geolocation is available in URL parameters
-            query_params = st.experimental_get_query_params()
-            if 'latitude' in query_params and 'longitude' in query_params:
-                try:
-                    st.session_state.browser_latitude = float(query_params['latitude'][0])
-                    st.session_state.browser_longitude = float(query_params['longitude'][0])
-                    
-                    st.success(f"Location captured: {st.session_state.browser_latitude}, {st.session_state.browser_longitude}")
-                except ValueError:
-                    st.warning("Could not parse location coordinates")
-            
-            # Debug: Log captured coordinates
-            st.write(f"Stored Latitude: {st.session_state.browser_latitude}")
-            st.write(f"Stored Longitude: {st.session_state.browser_longitude}")
-            
-            # Upload image to ImgBB
-            uploaded_image_url = upload_to_imgbb(captured_image)
-            if uploaded_image_url:
-                st.success("Image successfully uploaded to ImgBB")
-            
-            # Use browser-captured GPS if available
-            if st.session_state.browser_latitude and st.session_state.browser_longitude:
-                latitude = st.session_state.browser_latitude
-                longitude = st.session_state.browser_longitude
-            else:
-                # Existing GPS extraction or manual fallback
-                gps_data = extract_gps_from_image(captured_image)
-                
-                if gps_data:
-                    latitude, longitude = convert_gps_to_decimal(gps_data)
-                    if latitude and longitude:
-                        st.success(f"GPS Coordinates Extracted: {latitude}, {longitude}")
-                    else:
-                        st.warning("Could not convert GPS coordinates")
-                else:
-                    st.warning("No GPS data found in the image")
-                    
+    
         captured_image = st.camera_input("Capture Image")
         if captured_image:
             # Debug: Log captured image details
@@ -516,6 +482,22 @@ def main():
                 st.error(f"Error processing captured image: {e}")
                 # Log the full traceback
                 st.error(traceback.format_exc())
+    
+    elif location_method == "Capture Image":
+        captured_image = st.camera_input("Capture Image")
+        if captured_image:
+            # Upload image to ImgBB
+            uploaded_image_url = upload_to_imgbb(captured_image)
+            
+            if uploaded_image_url:
+                st.success("Image successfully uploaded to ImgBB")
+                
+                # Retrieve location details
+                location_details = st.session_state.get('location_details')
+                if location_details:
+                    st.success(f"Location Captured: {location_details['latitude']}, {location_details['longitude']}")
+                else:
+                    st.warning("Could not retrieve location. Please ensure location services are enabled.")
     
     # Additional Notes
     additional_notes = st.text_area("Additional Notes")
