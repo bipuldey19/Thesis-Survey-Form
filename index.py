@@ -283,13 +283,25 @@ def convert_gps_to_decimal(gps_coords):
         
         return None, None
 
-def get_browser_location():
+def get_gps_location():
     """
-    JavaScript to retrieve browser location
+    Add a button to get GPS location with user guidance
     """
-    location_script = """
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    st.subheader("GPS Location")
+    
+    # Informative text about location access
+    st.info("""
+    🌍 To capture your current location:
+    1. Click "Get My Location" button
+    2. Allow location access when prompted by your browser
+    3. Ensure you have location services enabled on your device
+    """)
+    
+    # Button to trigger location capture
+    if st.button("📍 Get My Location"):
+        # JavaScript to request and handle location
+        location_script = """
+        <script>
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function(position) {
@@ -302,14 +314,29 @@ def get_browser_location():
                     }, '*');
                 },
                 function(error) {
+                    // Handle location errors
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = "Location access was denied. Please enable location permissions.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = "Location information is unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = "Location request timed out.";
+                            break;
+                        default:
+                            errorMessage = "An unknown error occurred.";
+                    }
                     window.parent.postMessage({
                         type: 'streamlit:location-error', 
-                        message: error.message
+                        message: errorMessage
                     }, '*');
                 },
                 {
                     enableHighAccuracy: true,
-                    timeout: 5000,
+                    timeout: 10000,
                     maximumAge: 0
                 }
             );
@@ -319,20 +346,13 @@ def get_browser_location():
                 message: 'Geolocation is not supported by this browser.'
             }, '*');
         }
-    });
-    </script>
-    """
-    components.html(location_script, height=0)
-
-def modify_main_function(main_func):
-    def wrapper():
-        # Original main function content
-        main_func()
+        </script>
+        """
+        components.html(location_script, height=0)
         
-        # Add location retrieval script
+        # Add message listener
         st.markdown("""
         <script>
-        // Listen for location messages from the iframe
         window.addEventListener('message', function(event) {
             if (event.data.type === 'streamlit:location') {
                 Streamlit.setComponentValue({
@@ -341,21 +361,13 @@ def modify_main_function(main_func):
                     'accuracy': event.data.accuracy
                 });
             } else if (event.data.type === 'streamlit:location-error') {
-                console.error('Location Error:', event.data.message);
-                Streamlit.setComponentValue(null);
+                Streamlit.setComponentValue({
+                    'error': event.data.message
+                });
             }
         }, false);
         </script>
         """, unsafe_allow_html=True)
-        
-        # Trigger location retrieval when camera is active
-        location_placeholder = st.empty()
-        
-        if st.camera_input("Capture Location"):
-            get_browser_location()
-            location_placeholder.warning("Please allow location access when prompted")
-    
-    return wrapper
 
 # Main Streamlit Application
 def main():
@@ -451,7 +463,7 @@ def main():
                 # Log the full traceback
                 st.error(traceback.format_exc())
     
-    
+    elif location_method == "Capture Image":
         captured_image = st.camera_input("Capture Image")
         if captured_image:
             # Debug: Log captured image details
@@ -467,37 +479,24 @@ def main():
             
             # Extract GPS from captured image
             try:
-                gps_data = extract_gps_from_image(captured_image)
-                
-                if gps_data:
-                    latitude, longitude = convert_gps_to_decimal(gps_data)
-                    if latitude and longitude:
-                        st.success(f"GPS Coordinates Extracted: {latitude}, {longitude}")
-                    else:
-                        st.warning("Could not convert GPS coordinates")
-                else:
-                    st.warning("No GPS data found in the image")
+                get_gps_location()
+        
+                # Check if location was successfully retrieved
+                location_data = st.session_state.get('location_details')
+                if location_data and 'latitude' in location_data:
+                    latitude = location_data['latitude']
+                    longitude = location_data['longitude']
+            
+                    # Display retrieved location
+                    st.success(f"Location Captured: {latitude}, {longitude}")
+                elif location_data and 'error' in location_data:
+                    # Show error if location retrieval failed
+                    st.error(location_data['error'])
             
             except Exception as e:
                 st.error(f"Error processing captured image: {e}")
                 # Log the full traceback
                 st.error(traceback.format_exc())
-    
-    elif location_method == "Capture Image":
-        captured_image = st.camera_input("Capture Image")
-        if captured_image:
-            # Upload image to ImgBB
-            uploaded_image_url = upload_to_imgbb(captured_image)
-            
-            if uploaded_image_url:
-                st.success("Image successfully uploaded to ImgBB")
-                
-                # Retrieve location details
-                location_details = st.session_state.get('location_details')
-                if location_details:
-                    st.success(f"Location Captured: {location_details['latitude']}, {location_details['longitude']}")
-                else:
-                    st.warning("Could not retrieve location. Please ensure location services are enabled.")
     
     # Additional Notes
     additional_notes = st.text_area("Additional Notes")
