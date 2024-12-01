@@ -369,7 +369,7 @@ def convert_gps_to_decimal(gps_coords):
     
     return latitude, longitude
 
-def capture_location():
+
     st.subheader("GPS Location")
     
     st.info("""
@@ -384,6 +384,7 @@ def capture_location():
         try:
             # Get geolocation
             location = get_geolocation()
+            st.write(f"Your coordinates are {location}")
             
             if location:
                 # Parse location details
@@ -430,6 +431,45 @@ def capture_location():
         )
     
     return manual_latitude, manual_longitude
+
+def capture_image_location(captured_image):
+    """
+    Capture location when an image is taken
+    Returns latitude and longitude if successful, None if not
+    """
+    try:
+        # Attempt to get geolocation
+        location = get_geolocation()
+        
+        if location and 'coords' in location:
+            # Extract coordinates from the nested structure
+            coords = location['coords']
+            latitude = coords.get('latitude')
+            longitude = coords.get('longitude')
+            accuracy = coords.get('accuracy')
+            
+            # Display location details
+            st.success(f"Location Captured with Image:")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Latitude", f"{latitude:.6f}")
+            
+            with col2:
+                st.metric("Longitude", f"{longitude:.6f}")
+            
+            with col3:
+                st.metric("Accuracy", f"{accuracy:.2f} meters")
+            
+            return latitude, longitude
+        else:
+            st.warning("Location capture failed or was denied")
+            return None, None
+    
+    except Exception as e:
+        st.error(f"Location capture error: {e}")
+        return None, None
+
 
 # Main Streamlit Application
 def main():
@@ -542,21 +582,8 @@ def main():
             
             # Extract GPS from captured image
             try:
-                latitude, longitude = capture_location()
-                st.markdown("""
-    <script>
-    window.addEventListener('message', function(event) {
-        if (event.data.type === 'coordinates') {
-            // Handle coordinate message
-            console.log('Latitude:', event.data.latitude);
-            console.log('Longitude:', event.data.longitude);
-        } else if (event.data.type === 'location_error') {
-            // Handle location error
-            console.error('Location Error:', event.data.message);
-        }
-    }, false);
-    </script>
-    """, unsafe_allow_html=True)
+                latitude, longitude = capture_image_location(captured_image)
+ 
             except Exception as e:
                 st.error(f"Error processing captured image: {e}")
                 # Log the full traceback
