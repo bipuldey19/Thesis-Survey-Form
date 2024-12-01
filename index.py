@@ -11,6 +11,7 @@ import io
 import os
 import requests
 import base64
+import time
 from streamlit_js_eval import get_geolocation, streamlit_js_eval
 
 # Configure logging
@@ -433,10 +434,7 @@ def convert_gps_to_decimal(gps_coords):
     return manual_latitude, manual_longitude
 
 def capture_image_location(captured_image):
-    """
-    Capture location when an image is taken
-    Returns latitude and longitude if successful, None if not
-    """
+    
     try:
         # Attempt to get geolocation
         location = get_geolocation()
@@ -449,7 +447,7 @@ def capture_image_location(captured_image):
             accuracy = coords.get('accuracy')
             
             # Display location details
-            st.success(f"Location Captured with Image:")
+            #st.success(f"Location Captured with Image:")
             col1, col2, col3 = st.columns(3)
             
             with col1:
@@ -463,7 +461,7 @@ def capture_image_location(captured_image):
             
             return latitude, longitude
         else:
-            st.warning("Location capture failed or was denied")
+            st.warning("Getting location from image 🛠️")
             return None, None
     
     except Exception as e:
@@ -544,7 +542,9 @@ def main():
             # Upload image to ImgBB
             uploaded_image_url = upload_to_imgbb(uploaded_image)
             if uploaded_image_url:
-                st.success("Image successfully uploaded to ImgBB")
+                successMsg = st.success("Image successfully uploaded")
+                time.sleep(3)
+                successMsg.empty()
                 #st.image(uploaded_image_url, caption="Uploaded Image")
             
             # Extract GPS from uploaded image with logging
@@ -554,7 +554,11 @@ def main():
                 if gps_data:
                     latitude, longitude = convert_gps_to_decimal(gps_data)
                     if latitude and longitude:
-                        st.success(f"GPS Coordinates Extracted: {latitude}, {longitude}")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Latitude", f"{latitude:.6f}")
+                        with col2:
+                            st.metric("Longitude", f"{latitude:.6f}")
                     else:
                         st.warning("Could not convert GPS coordinates")
                 else:
@@ -568,17 +572,13 @@ def main():
     elif location_method == "Capture Image":
         latitude, longitude = None, None
         captured_image = st.camera_input("Capture Image")
+                
         if captured_image:
             # Debug: Log captured image details
             #st.write(f"Captured Image Name: {captured_image.name}")
             #st.write(f"Captured Image Type: {captured_image.type}")
             #st.write(f"Captured Image Size: {captured_image.size} bytes")
-            st.success("Image captured successfully")
-            
-            # Upload image to ImgBB
-            uploaded_image_url = upload_to_imgbb(captured_image)
-            if uploaded_image_url:
-                st.success("Image successfully uploaded to ImgBB")
+            #st.success("Image captured successfully")
             
             # Extract GPS from captured image
             try:
@@ -588,6 +588,13 @@ def main():
                 st.error(f"Error processing captured image: {e}")
                 # Log the full traceback
                 st.error(traceback.format_exc())
+                
+            # Upload image to ImgBB
+            uploaded_image_url = upload_to_imgbb(captured_image)
+            if uploaded_image_url:
+                successMsg = st.success("Image successfully captured & uploaded")
+                time.sleep(3)
+                successMsg.empty()
     
     # Additional Notes
     additional_notes = st.text_area("Additional Notes")
@@ -623,7 +630,9 @@ def main():
         if client:
             success = submit_to_google_sheets(client, data_to_submit)
             if success:
-                st.success("Data successfully submitted to Google Sheets!")
+                successMsg = st.success("Data successfully submitted!")
+                time.sleep(3)
+                successMsg.empty()
             else:
                 st.error("Failed to submit data to Google Sheets")
 
