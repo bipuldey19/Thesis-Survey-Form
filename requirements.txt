@@ -7,3 +7,4 @@ piexif
 requests
 python-dotenv
 gdown
+streamlit_js_eval
