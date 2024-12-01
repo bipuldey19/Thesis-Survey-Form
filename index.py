@@ -11,7 +11,7 @@ import io
 import os
 import requests
 import base64
-import json
+from streamlit_js_eval import get_geolocation, streamlit_js_eval
 
 # Configure logging
 logging.basicConfig(
@@ -283,90 +283,153 @@ def convert_gps_to_decimal(gps_coords):
         
         return None, None
 
-def get_gps_location():
+
     """
-    Add a button to get GPS location with user guidance
+    Simple GPS location capture method
     """
     st.subheader("GPS Location")
     
-    # Informative text about location access
     st.info("""
-    🌍 To capture your current location:
+    🌍 Location Capture Instructions:
     1. Click "Get My Location" button
-    2. Allow location access when prompted by your browser
-    3. Ensure you have location services enabled on your device
+    2. Allow location access when prompted
+    3. Ensure location services are enabled
     """)
     
-    # Button to trigger location capture
-    if st.button("📍 Get My Location"):
-        # JavaScript to request and handle location
-        location_script = """
-        <script>
-if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-        function(position) {
-            // Create a more structured message
-            const locationData = JSON.stringify({
-                latitude: position.coords.latitude, 
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            });
-            
-            // Use Streamlit.setComponentValue more explicitly
-            Streamlit.setComponentValue(locationData);
-        },
-        function(error) {
-            let errorMessage = '';
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMessage = "Location access was denied.";
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMessage = "Location information unavailable.";
-                    break;
-                case error.TIMEOUT:
-                    errorMessage = "Location request timed out.";
-                    break;
-                default:
-                    errorMessage = "An unknown error occurred.";
+    # Columns for manual and automatic location
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        latitude = st.number_input(
+            "Latitude", 
+            format="%.6f", 
+            key="manual_latitude", 
+            help="Enter latitude manually if automatic capture fails"
+        )
+    
+    with col2:
+        longitude = st.number_input(
+            "Longitude", 
+            format="%.6f", 
+            key="manual_longitude", 
+            help="Enter longitude manually if automatic capture fails"
+        )
+    
+    # Location capture button
+    if st.button("📍 Capture Location"):
+        # Try multiple methods
+        try:
+            # Method 1: Direct JavaScript injection
+            location_script = """
+            <script>
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        // Send coordinates directly
+                        window.parent.postMessage({
+                            'latitude': position.coords.latitude,
+                            'longitude': position.coords.longitude
+                        }, '*');
+                    },
+                    function(error) {
+                        window.parent.postMessage({
+                            'error': error.message
+                        }, '*');
+                    }
+                );
+            } else {
+                window.parent.postMessage({
+                    'error': 'Geolocation not supported'
+                }, '*');
             }
+            </script>
+            """
             
-            // Send error as component value
-            Streamlit.setComponentValue(JSON.stringify({ error: errorMessage }));
-        },
-        {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        }
-    );
-} else {
-    Streamlit.setComponentValue(JSON.stringify({ 
-        error: 'Geolocation is not supported by this browser.' 
-    }));
-}
-</script>
-        """
-        components.html(location_script, height=0)
+            components.html(location_script, height=0)
+            
+            # Add event listener to capture coordinates
+            st.markdown("""
+            <script>
+            window.addEventListener('message', function(event) {
+                if (event.data.latitude && event.data.longitude) {
+                    // Update Streamlit component
+                    Streamlit.setComponentValue({
+                        'latitude': event.data.latitude,
+                        'longitude': event.data.longitude
+                    });
+                } else if (event.data.error) {
+                    console.error('Location Error:', event.data.error);
+                }
+            }, false);
+            </script>
+            """, unsafe_allow_html=True)
         
-        # Add message listener
-        st.markdown("""
-        <script>
-        window.addEventListener('message', function(event) {
-            if (event.data.type === 'streamlit:location') {
-                Streamlit.setComponentValue({
-                    'latitude': event.data.latitude,
-                    'longitude': event.data.longitude,
-                    'accuracy': event.data.accuracy
-                });
-            } else if (event.data.type === 'streamlit:location-error') {
-                Streamlit.setComponentValue({
-                    'error': event.data.message
-                });
-            }
-        }, false);
-        </script>
-        """, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Location capture error: {e}")
+    
+    return latitude, longitude
+
+def capture_location():
+    st.subheader("GPS Location")
+    
+    st.info("""
+    🌍 Location Capture Instructions:
+    1. Click "Get My Location" button
+    2. Allow location access when prompted
+    3. Ensure location services are enabled
+    """)
+    
+    # Capture location using Streamlit-JS-Eval
+    if st.button("📍 Capture Location"):
+        try:
+            # Get geolocation
+            location = get_geolocation()
+            
+            if location:
+                # Parse location details
+                latitude = location.get('latitude')
+                longitude = location.get('longitude')
+                accuracy = location.get('accuracy')
+                
+                # Display location details
+                st.success(f"Location Captured:")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Latitude", f"{latitude:.6f}")
+                
+                with col2:
+                    st.metric("Longitude", f"{longitude:.6f}")
+                
+                with col3:
+                    st.metric("Accuracy", f"{accuracy:.2f} meters")
+                
+                return latitude, longitude
+            else:
+                st.warning("Location capture failed or was denied")
+                return None, None
+        
+        except Exception as e:
+            st.error(f"Location capture error: {e}")
+            return None, None
+    
+    # Manual input fallback
+    col1, col2 = st.columns(2)
+    with col1:
+        manual_latitude = st.number_input(
+            "Latitude", 
+            format="%.6f", 
+            key="manual_latitude"
+        )
+    
+    with col2:
+        manual_longitude = st.number_input(
+            "Longitude", 
+            format="%.6f", 
+            key="manual_longitude"
+        )
+    
+    return manual_latitude, manual_longitude
 
 # Main Streamlit Application
 def main():
@@ -463,32 +526,41 @@ def main():
                 st.error(traceback.format_exc())
     
     elif location_method == "Capture Image":
+        latitude, longitude = None, None
         captured_image = st.camera_input("Capture Image")
-    if captured_image:
-        # Upload image to ImgBB
-        uploaded_image_url = upload_to_imgbb(captured_image)
-        if uploaded_image_url:
-            st.success("Image successfully uploaded to ImgBB")
-        
-        # Add a hidden component to capture location
-        location_script = """
-        <script>
-        // (Use the script from above)
-        </script>
-        """
-        location_result = components.html(location_script, height=0)
-        
-        # Parse the location result
-        try:
-            location_data = json.loads(location_result)
-            if 'latitude' in location_data:
-                latitude = location_data['latitude']
-                longitude = location_data['longitude']
-                st.success(f"Location Captured: {latitude}, {longitude}")
-            elif 'error' in location_data:
-                st.error(location_data['error'])
-        except Exception as e:
-            st.error(f"Error parsing location data: {e}")
+        if captured_image:
+            # Debug: Log captured image details
+            #st.write(f"Captured Image Name: {captured_image.name}")
+            #st.write(f"Captured Image Type: {captured_image.type}")
+            #st.write(f"Captured Image Size: {captured_image.size} bytes")
+            st.success("Image captured successfully")
+            
+            # Upload image to ImgBB
+            uploaded_image_url = upload_to_imgbb(captured_image)
+            if uploaded_image_url:
+                st.success("Image successfully uploaded to ImgBB")
+            
+            # Extract GPS from captured image
+            try:
+                latitude, longitude = capture_location()
+                st.markdown("""
+    <script>
+    window.addEventListener('message', function(event) {
+        if (event.data.type === 'coordinates') {
+            // Handle coordinate message
+            console.log('Latitude:', event.data.latitude);
+            console.log('Longitude:', event.data.longitude);
+        } else if (event.data.type === 'location_error') {
+            // Handle location error
+            console.error('Location Error:', event.data.message);
+        }
+    }, false);
+    </script>
+    """, unsafe_allow_html=True)
+            except Exception as e:
+                st.error(f"Error processing captured image: {e}")
+                # Log the full traceback
+                st.error(traceback.format_exc())
     
     # Additional Notes
     additional_notes = st.text_area("Additional Notes")
