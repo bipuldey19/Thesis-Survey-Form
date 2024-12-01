@@ -11,7 +11,7 @@ import io
 import os
 import requests
 import base64
-
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -302,51 +302,50 @@ def get_gps_location():
         # JavaScript to request and handle location
         location_script = """
         <script>
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    // Send coordinates back to Streamlit
-                    window.parent.postMessage({
-                        type: 'streamlit:location', 
-                        latitude: position.coords.latitude, 
-                        longitude: position.coords.longitude,
-                        accuracy: position.coords.accuracy
-                    }, '*');
-                },
-                function(error) {
-                    // Handle location errors
-                    let errorMessage = '';
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            errorMessage = "Location access was denied. Please enable location permissions.";
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            errorMessage = "Location information is unavailable.";
-                            break;
-                        case error.TIMEOUT:
-                            errorMessage = "Location request timed out.";
-                            break;
-                        default:
-                            errorMessage = "An unknown error occurred.";
-                    }
-                    window.parent.postMessage({
-                        type: 'streamlit:location-error', 
-                        message: errorMessage
-                    }, '*');
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 10000,
-                    maximumAge: 0
-                }
-            );
-        } else {
-            window.parent.postMessage({
-                type: 'streamlit:location-error', 
-                message: 'Geolocation is not supported by this browser.'
-            }, '*');
+if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            // Create a more structured message
+            const locationData = JSON.stringify({
+                latitude: position.coords.latitude, 
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy
+            });
+            
+            // Use Streamlit.setComponentValue more explicitly
+            Streamlit.setComponentValue(locationData);
+        },
+        function(error) {
+            let errorMessage = '';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = "Location access was denied.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = "Location information unavailable.";
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = "Location request timed out.";
+                    break;
+                default:
+                    errorMessage = "An unknown error occurred.";
+            }
+            
+            // Send error as component value
+            Streamlit.setComponentValue(JSON.stringify({ error: errorMessage }));
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
         }
-        </script>
+    );
+} else {
+    Streamlit.setComponentValue(JSON.stringify({ 
+        error: 'Geolocation is not supported by this browser.' 
+    }));
+}
+</script>
         """
         components.html(location_script, height=0)
         
@@ -465,38 +464,31 @@ def main():
     
     elif location_method == "Capture Image":
         captured_image = st.camera_input("Capture Image")
-        if captured_image:
-            # Debug: Log captured image details
-            #st.write(f"Captured Image Name: {captured_image.name}")
-            #st.write(f"Captured Image Type: {captured_image.type}")
-            #st.write(f"Captured Image Size: {captured_image.size} bytes")
-            st.success("Image captured successfully")
-            
-            # Upload image to ImgBB
-            uploaded_image_url = upload_to_imgbb(captured_image)
-            if uploaded_image_url:
-                st.success("Image successfully uploaded to ImgBB")
-            
-            # Extract GPS from captured image
-            try:
-                get_gps_location()
+    if captured_image:
+        # Upload image to ImgBB
+        uploaded_image_url = upload_to_imgbb(captured_image)
+        if uploaded_image_url:
+            st.success("Image successfully uploaded to ImgBB")
         
-                # Check if location was successfully retrieved
-                location_data = st.session_state.get('location_details')
-                if location_data and 'latitude' in location_data:
-                    latitude = location_data['latitude']
-                    longitude = location_data['longitude']
-            
-                    # Display retrieved location
-                    st.success(f"Location Captured: {latitude}, {longitude}")
-                elif location_data and 'error' in location_data:
-                    # Show error if location retrieval failed
-                    st.error(location_data['error'])
-            
-            except Exception as e:
-                st.error(f"Error processing captured image: {e}")
-                # Log the full traceback
-                st.error(traceback.format_exc())
+        # Add a hidden component to capture location
+        location_script = """
+        <script>
+        // (Use the script from above)
+        </script>
+        """
+        location_result = components.html(location_script, height=0)
+        
+        # Parse the location result
+        try:
+            location_data = json.loads(location_result)
+            if 'latitude' in location_data:
+                latitude = location_data['latitude']
+                longitude = location_data['longitude']
+                st.success(f"Location Captured: {latitude}, {longitude}")
+            elif 'error' in location_data:
+                st.error(location_data['error'])
+        except Exception as e:
+            st.error(f"Error parsing location data: {e}")
     
     # Additional Notes
     additional_notes = st.text_area("Additional Notes")
