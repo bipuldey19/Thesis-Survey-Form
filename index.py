@@ -194,43 +194,61 @@ def extract_gps_from_image(image):
         logger.info(f"Image opened successfully. Format: {img.format}, Mode: {img.mode}, Size: {img.size}")
         
         try:
+            # Use piexif to load EXIF data
             exif_dict = piexif.load(img.info.get('exif', b''))
             logger.info("EXIF data extracted successfully")
             
-            logger.info("Available EXIF keys:")
-            for ifd in exif_dict:
-                logger.info(f"IFD: {ifd}")
-                if ifd == 'GPS':
-                    logger.info("GPS Data found:")
-                    for tag, value in exif_dict[ifd].items():
-                        logger.info(f"GPS Tag {tag}: {value}")
+            # Check if GPS data exists
+            gps_ifd = exif_dict.get('GPS', {})
             
-            if exif_dict.get('GPS'):
-                gps_info = exif_dict['GPS']
-                logger.info(f"Raw GPS Info: {gps_info}")
+            if (piexif.GPSIFD.GPSLatitude in gps_ifd and 
+                piexif.GPSIFD.GPSLongitude in gps_ifd):
+                
+                gps_info = {
+                    'latitude': gps_ifd.get(piexif.GPSIFD.GPSLatitude),
+                    'latitude_ref': gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef),
+                    'longitude': gps_ifd.get(piexif.GPSIFD.GPSLongitude),
+                    'longitude_ref': gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef)
+                }
+                
+                logger.info(f"GPS Info extracted: {gps_info}")
                 return gps_info
             else:
                 logger.warning("No GPS information found in EXIF data")
                 return None
         
         except Exception as exif_error:
-            logger.error("Error extracting EXIF data")
-            logger.error(f"Error details: {str(exif_error)}")
+            logger.error(f"Error extracting EXIF data: {exif_error}")
             logger.error(traceback.format_exc())
-            
-            logger.info(f"Image info keys: {img.info.keys() if hasattr(img, 'info') else 'No info attribute'}")
-        
-        logger.warning("No GPS data could be extracted from the image")
-        return None
+            return None
     
     except Exception as e:
-        logger.error("Critical error in GPS extraction")
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"Critical error in GPS extraction: {e}")
         logger.error(traceback.format_exc())
+        return None
+
+def dms_to_decimal(coords, ref):
+    if not coords or not ref:
+        return None
+    
+    try:
+        # Unpack the coordinate tuple
+        degrees = coords[0][0] / coords[0][1]  # First tuple is degrees
+        minutes = coords[1][0] / coords[1][1]  # Second tuple is minutes
+        seconds = coords[2][0] / coords[2][1]  # Third tuple is seconds
         
-        logger.info(f"Image type: {type(image)}")
-        logger.info(f"Image name: {getattr(image, 'name', 'Unknown')}")
+        # Convert to decimal
+        decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
         
+        # Apply sign based on reference
+        if ref in [b'S', b'W', 'S', 'W']:
+            decimal = -decimal
+        
+        return decimal
+    except Exception as conv_error:
+        logger.error(f"Coordinate conversion error: {conv_error}")
+        logger.error(f"Coordinates: {coords}, Reference: {ref}")
+        logger.error(traceback.format_exc())
         return None
 
 def convert_gps_to_decimal(gps_coords):
@@ -240,50 +258,27 @@ def convert_gps_to_decimal(gps_coords):
     
     try:
         logger.info("Starting GPS coordinate conversion")
-        logger.info(f"Input GPS Coordinates: {gps_coords}")
         
-        # Extract latitude
-        lat = gps_coords.get(piexif.GPSIFD.GPSLatitude)
-        lat_ref = gps_coords.get(piexif.GPSIFD.GPSLatitudeRef)
+        # Convert latitude and longitude
+        latitude = dms_to_decimal(
+            gps_coords.get('latitude'), 
+            gps_coords.get('latitude_ref')
+        )
+        longitude = dms_to_decimal(
+            gps_coords.get('longitude'), 
+            gps_coords.get('longitude_ref')
+        )
         
-        # Extract longitude
-        lon = gps_coords.get(piexif.GPSIFD.GPSLongitude)
-        lon_ref = gps_coords.get(piexif.GPSIFD.GPSLongitudeRef)
+        logger.info(f"Converted Coordinates - Lat: {latitude}, Lon: {longitude}")
         
-        logger.info(f"Latitude: {lat}, Latitude Ref: {lat_ref}")
-        logger.info(f"Longitude: {lon}, Longitude Ref: {lon_ref}")
-        
-        def convert_to_decimal(coordinate, reference):
-            if not coordinate or not reference:
-                return None
-            
-            try:
-                degrees, minutes, seconds = coordinate
-                decimal = degrees[0] + (minutes[0] / 60.0) + (seconds[0] / 3600.0)
-                
-                if reference in [b'S', b'W', 'S', 'W']:
-                    decimal = -decimal
-                
-                return decimal
-            except Exception as conv_error:
-                logger.error(f"Coordinate conversion error: {conv_error}")
-                return None
-        
-        # Convert coordinates
-        lat_decimal = convert_to_decimal(lat, lat_ref)
-        lon_decimal = convert_to_decimal(lon, lon_ref)
-        
-        logger.info(f"Converted Coordinates - Lat: {lat_decimal}, Lon: {lon_decimal}")
-        
-        return lat_decimal, lon_decimal
+        return latitude, longitude
     
     except Exception as e:
-        logger.error("Error converting GPS coordinates")
-        logger.error(f"Error details: {str(e)}")
+        logger.error(f"Error converting GPS coordinates: {e}")
         logger.error(traceback.format_exc())
         
         return None, None
-
+  
 def capture_image_location(captured_image):
     
     try:
@@ -398,27 +393,25 @@ def main():
                 successMsg.empty()
                 #st.image(uploaded_image_url, caption="Uploaded Image")
             
-            # Extract GPS from uploaded image with logging
-            try:
-                gps_data = extract_gps_from_image(uploaded_image)
-                
-                if gps_data:
-                    latitude, longitude = convert_gps_to_decimal(gps_data)
-                    if latitude and longitude:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("Latitude", f"{latitude:.6f}")
-                        with col2:
-                            st.metric("Longitude", f"{latitude:.6f}")
-                    else:
-                        st.warning("Could not convert GPS coordinates")
-                else:
-                    st.warning("No GPS data found in the image")
+                # Extract GPS from uploaded image with logging
+                try:
+                    gps_data = extract_gps_from_image(uploaded_image)
+
+                    if gps_data:
+                        latitude, longitude = convert_gps_to_decimal(gps_data)
+                        if latitude and longitude:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.metric("Latitude", f"{latitude:.6f}")
+                            with col2:
+                                st.metric("Longitude", f"{longitude:.6f}")
+                        else:
+                            st.warning("No GPS data found in the image")
             
-            except Exception as e:
-                st.error(f"Error processing image: {e}")
-                # Log the full traceback
-                st.error(traceback.format_exc())
+                except Exception as e:
+                    st.error(f"Error processing image: {e}")
+                    # Log the full traceback
+                    st.error(traceback.format_exc())
     
     elif location_method == "Capture Image":
         latitude, longitude = None, None
