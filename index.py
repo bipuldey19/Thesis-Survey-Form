@@ -317,6 +317,9 @@ def capture_image_location(captured_image):
 
 # Main Streamlit Application
 def main():
+    st.set_page_config(
+        page_title="Road Distress Point Data Collection", page_icon=":world_map:")
+    
     st.title("Road Distress Point Data Collection")
     
     # Create form sections
